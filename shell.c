@@ -6,52 +6,40 @@
 /* Max number */
 #define MAX_SIZE 4096
 
-void CD(char* options, char* directory) {
-    char path[MAX_SIZE];
-    char CWD[MAX_SIZE];
-    char* up = "..";
-    
-    if (strcmp(up,args)) {
-        strcpy(path, args);
-        getcwd(CWD, sizeof(CWD));
-    
-        strcat(CWD, "/");
-        strcat(CWD, path);
-    }
-    else {
-        *CWD = *up;
-    }
-    
-    chdir(CWD);
-    printf("%s\n", CWD);
-}
-
 int main(int argc, char* argv[]) {
     
     /* Variable declarations */
     char* commandArgs[MAX_SIZE];
     char command[MAX_SIZE];
     
-    char* presentWorkingDirectory[MAX_SIZE];
     char* _shell_name = "seashell";
-    char* strExit = "exit";
-    char* returnPointer;
-    char* CWD = "cwd";
-    char* PWD = "pwd";
-    char* _last_dir;
-    char* cd = "cd";
+    char* _old_pwd = NULL;
+    char* _pwd = NULL;
+    char* return_pointer;
+    char* cmd_exit = "exit";
+    char* cmd_cwd = "cwd";
+    char* cmd_pwd = "pwd";
+    char* cmd_cd = "cd";
+    char* cmd_last_dir = "-";
+    char* cmd_home_dir = "~";
     char* amp = "&";
+    char* up_dir = "..";
     char* arg;
     
-    char returnChar = '\n';
-    char nullChar = '\0';
+    char RETURN_CHAR = '\n';
+    char NULL_CHAR = '\0';
     
-    int blnRunBackground = 0;
-    int blnIsCWD = 0;
-    int blnIsPWD = 0;
-    int blnIsCD = 0;
-    int childPid = 0;
+    int bln_run_background = 0;
+    int size_of_args = 0;
+    int bln_is_cwd = 0;
+    int bln_is_pwd = 0;
+    int bln_is_cd = 0;
+    int child_pid = 0;
     int i = 0;
+    
+    // Default the OLDPWD to be the HOME directory.
+    _old_pwd = getenv("HOME");
+    setenv("OLDPWD", _old_pwd, 1);
     
     while(1) /* Repeat forever */ {
         
@@ -74,28 +62,29 @@ int main(int argc, char* argv[]) {
         
         while (arg) {
             
-            // If the last character in the string is a return, throw it away.
-            if ((returnPointer = strchr(arg, returnChar)) != NULL) {
-                *returnPointer = nullChar;
+            // If the last character in the string is a return, change it
+            // to be a line terminator. YOU HAVE BEEN TERMINATED.
+            if ((return_pointer = strchr(arg, RETURN_CHAR)) != NULL) {
+                *return_pointer = NULL_CHAR;
             }
             
             // If the current string is an '&' then we need to print the
             // job ID so set our flag.
             if (strcmp(arg, amp) == 0) {
-                blnRunBackground = -1;
+                bln_run_background = -1;
             }
             else {
                 // Save the token to our char * array.
                 commandArgs[i++] = arg;
                 
-                if (strcmp(arg, cd) == 0) {
-                    blnIsCD = -1;
+                if (!strcmp(arg, cmd_cd)) {
+                    bln_is_cd = -1;
                 }
-                else if (strcmp(arg, CWD) == 0) {
-                    blnIsCWD = -1;
+                else if (!strcmp(arg, cmd_cwd)) {
+                    bln_is_cwd = -1;
                 }
-                else if (strcmp(arg, PWD) == 0) {
-                    blnIsPWD = -1;
+                else if (!strcmp(arg, cmd_pwd)) {
+                    bln_is_pwd = -1;
                 }
             }
             
@@ -105,69 +94,144 @@ int main(int argc, char* argv[]) {
         /* If the user entered 'exit' then call the exit() system call
          * to terminate the process
          */
-        if (!strcmp(commandArgs[0], strExit)) {
+        if (!strcmp(commandArgs[0], cmd_exit)) {
             exit(0);
+            return 0;
         }
 
         /* Fork a child process to execute the command and return 
-         * the result of the fork() in the childPid variable so 
+         * the result of the fork() in the child_pid variable so 
          * we know whether we're now executing as the parent 
          * or child and whether or not the fork() succeeded
          */
-        if (!(blnIsCWD || blnIsCD || blnIsPWD)) {
-            childPid = fork();
+        if (!(bln_is_cwd || bln_is_cd || bln_is_pwd)) {
+            child_pid = fork();
         }
         
         /* We forked no child, we ARE the child */
-        if (!(blnIsCD || blnIsPWD || blnIsCWD || childPid)) {
+        if (!(bln_is_cd || bln_is_pwd || bln_is_cwd || child_pid)) {
             /* We're now executing in the context of the child process.
              * Use execvp() or execlp() to replace this program in 
              * the process' memory with the executable command the 
              * user has asked for.  
              */
             
-//            puts("commandArgs[0]:");
-//            puts(commandArgs[0]);
-//            puts("commandArgs[1]:");
-//            puts(commandArgs[1]);
-//            puts("commandArgs[2]:");
-//            puts(commandArgs[2]);
-            
             execvp(*commandArgs, commandArgs);
         }
         /* An error occured during the fork - print it */
-        else if (childPid < 0) {
-            printf("Error: %d%c", childPid, returnChar);
-            childPid = 0;
+        else if (child_pid < 0) {
+            printf("Error: %d%c", child_pid, RETURN_CHAR);
+            child_pid = 0;
         }
-        /* childPid is the PID of the child */
+        /* child_pid is the PID of the child */
         else  {
             /* We're still executing in the parent process.
              * Wait for the child to finish before we prompt
              * again.
              */
-            if (blnRunBackground) {
-                printf("Job %d%c", childPid, returnChar);
+            // First, check if we are going to run this in the
+            // background, if so print the pid.
+            if (bln_run_background) {
+                printf("Job %d%c", child_pid, RETURN_CHAR);
             }
-            else if (blnIsCD) {
-                // Call our cd command
-                CD(commandArgs[1], commandArgs[2]);
+            // If CD is called, run CD.
+            if (bln_is_cd) {
+                
+                // Change back to the last dir.
+                if (!strcmp(commandArgs[1], cmd_last_dir)) {
+                
+                    // Save OLDPWD, PWD.
+                    _pwd = getenv("OLDPWD");
+                    _old_pwd = getcwd(NULL, MAX_SIZE);
+                    
+                    // Updated the current working directory and
+                    // get the updated current working directory.
+                    chdir(_pwd);
+                    _pwd = getcwd(NULL, MAX_SIZE);
+                    
+                    // Overwrite OLDPWD with new PWD and the PWD
+                    // with the new OLDPWD.
+                    setenv("OLDPWD", _old_pwd, 1);
+                    setenv("PWD", _pwd, 1);
+                }
+                // Change to the Home directory.
+                else if (!strcmp(commandArgs[1], cmd_home_dir)) {
+                    
+                    // Get the HOME ENV variable.
+                    // Get the current PWD.
+                    _pwd = getenv("HOME");
+                    _old_pwd = getcwd(NULL, MAX_SIZE);
+                    
+                    // Change the current working directory.
+                    chdir(_pwd);
+                    
+                    // Updated our ENV variables.
+                    setenv("OLDPWD", _old_pwd, 1);
+                    setenv("PWD", _pwd, 1);
+                }
+                // Change to up a directory.
+                else if (!strcmp(commandArgs[1], up_dir)) {
+                    
+                    // Save OLDPWD.
+                    _old_pwd = getcwd(NULL, MAX_SIZE);
+                    
+                    // Updated the current working directory and
+                    // get the updated current working directory.
+                    chdir(commandArgs[1]);
+                    _pwd = getcwd(NULL, MAX_SIZE);
+
+                    // Updated our ENV variables.
+                    setenv("OLDPWD", _old_pwd, 1);
+                    setenv("PWD", _pwd, 1);
+                }
+                else {
+                    
+                    // Save OLDPWD, PWD.
+                    _pwd = commandArgs[1];
+                    _old_pwd = getcwd(NULL, MAX_SIZE);
+                    
+                    // Updated the current working directory and
+                    // get the updated current working directory.
+                    chdir(_pwd);
+                    _pwd = getcwd(NULL, MAX_SIZE);
+                    
+                    // Updated our ENV variables.
+                    setenv("OLDPWD", _old_pwd, 1);
+                    setenv("PWD", _pwd, 1);
+                }
+                printf("%s%c", _pwd, RETURN_CHAR);
             }
-            else if (blnIsPWD) {
-                // Call our PWD command
-                *presentWorkingDirectory = getcwd(*presentWorkingDirectory, sizeof(*presentWorkingDirectory));
-                printf("%s%c", *presentWorkingDirectory, returnChar);
+            // If PWD is called, run PWD.
+            else if (bln_is_pwd) {
+                _pwd = getenv("PWD");
+                printf("%s%c", _pwd, RETURN_CHAR);
             }
             else {
                 wait(NULL);
             }
+            
+            
+//            _old_pwd = getenv("OLDPWD");
+//            _pwd = getenv("PWD");
+//                              
+//            printf("PWD: %s\n", _pwd);
+//            printf("OLDPWD: %s\n", _old_pwd);
+            
+            size_of_args = sizeof(commandArgs[0]);
+            
+            // Clear out our previous arguments.
+            for (int i = 0; i < size_of_args; i++) {
+                commandArgs[i] = NULL;
+            }
+            
+            size_of_args = 0;
         }
         
         // Reset the command args pointer.
-        blnRunBackground = 0;
-        blnIsCWD = 0;
-        blnIsPWD = 0;
-        blnIsCD = 0;
+        bln_run_background = 0;
+        bln_is_cwd = 0;
+        bln_is_pwd = 0;
+        bln_is_cd = 0;
 
     } /* while */
     
