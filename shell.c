@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
             
             // If the current string is an '&' then we need to print the
             // job ID so set our flag.
-            if (strcmp(arg, amp) == 0) {
+            if (!strcmp(arg, amp)) {
                 bln_run_background = -1;
             }
             else {
@@ -115,7 +115,6 @@ int main(int argc, char* argv[]) {
              * the process' memory with the executable command the 
              * user has asked for.  
              */
-            
             execvp(*commandArgs, commandArgs);
         }
         /* An error occured during the fork - print it */
@@ -137,8 +136,23 @@ int main(int argc, char* argv[]) {
             // If CD is called, run CD.
             if (bln_is_cd) {
                 
+                // Change to the Home directory if no args or args match "~".
+                if (!commandArgs[1] || !strcmp(commandArgs[1], cmd_home_dir)) {
+                    
+                    // Get the HOME ENV variable.
+                    // Get the current PWD.
+                    _pwd = getenv("HOME");
+                    _old_pwd = getcwd(NULL, MAX_SIZE);
+                    
+                    // Change the current working directory.
+                    chdir(_pwd);
+                    
+                    // Updated our ENV variables.
+                    setenv("OLDPWD", _old_pwd, 1);
+                    setenv("PWD", _pwd, 1);
+                }
                 // Change back to the last dir.
-                if (!strcmp(commandArgs[1], cmd_last_dir)) {
+                else if (!strcmp(commandArgs[1], cmd_last_dir)) {
                 
                     // Save OLDPWD, PWD.
                     _pwd = getenv("OLDPWD");
@@ -151,21 +165,6 @@ int main(int argc, char* argv[]) {
                     
                     // Overwrite OLDPWD with new PWD and the PWD
                     // with the new OLDPWD.
-                    setenv("OLDPWD", _old_pwd, 1);
-                    setenv("PWD", _pwd, 1);
-                }
-                // Change to the Home directory.
-                else if (!strcmp(commandArgs[1], cmd_home_dir)) {
-                    
-                    // Get the HOME ENV variable.
-                    // Get the current PWD.
-                    _pwd = getenv("HOME");
-                    _old_pwd = getcwd(NULL, MAX_SIZE);
-                    
-                    // Change the current working directory.
-                    chdir(_pwd);
-                    
-                    // Updated our ENV variables.
                     setenv("OLDPWD", _old_pwd, 1);
                     setenv("PWD", _pwd, 1);
                 }
